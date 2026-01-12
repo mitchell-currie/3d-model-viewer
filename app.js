@@ -15,20 +15,20 @@ let environmentType = 'skybox'; // 'skybox' or 'cubemap'
 
 // Skybox settings
 let skyboxSettings = {
-    topColor: new THREE.Color(0x1e3c72),
-    horizonColor: new THREE.Color(0x7e22ce),
-    bottomColor: new THREE.Color(0x2a5298),
+    topColor: new THREE.Color(0x4a90e2),    // Blue
+    horizonColor: new THREE.Color(0xf39c12), // Orange
+    bottomColor: new THREE.Color(0x2c3e50),  // Dark gray-blue
     exponent: 2.0
 };
 
 // Cubemap settings
 let cubemapSettings = {
-    front: new THREE.Color(0x00ff00),   // Green
-    back: new THREE.Color(0xff00ff),    // Magenta
-    top: new THREE.Color(0xffff00),     // Yellow
-    bottom: new THREE.Color(0x00ffff),  // Cyan
-    right: new THREE.Color(0xff0000),   // Red
-    left: new THREE.Color(0x0000ff)     // Blue
+    front: new THREE.Color(0x27ae60),   // Green
+    back: new THREE.Color(0x9b59b6),    // Purple
+    top: new THREE.Color(0xf39c12),     // Orange
+    bottom: new THREE.Color(0x2c3e50),  // Dark gray-blue
+    right: new THREE.Color(0xe74c3c),   // Red
+    left: new THREE.Color(0x3498db)     // Blue
 };
 
 // Initialize Three.js scene
@@ -231,11 +231,11 @@ function switchEnvironment(type) {
 
 function createLights() {
     // Ambient light for base illumination
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
     scene.add(ambientLight);
 
     // Main directional light with shadows
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
     directionalLight.position.set(5, 5, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
@@ -245,23 +245,19 @@ function createLights() {
     scene.add(directionalLight);
 
     // Rim light (back light for edge definition)
-    const rimLight = new THREE.DirectionalLight(0x667eea, 0.8);
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
     rimLight.position.set(-5, 0, -5);
     scene.add(rimLight);
 
-    // Point light for dynamic color
-    const pointLight1 = new THREE.PointLight(0xff00ff, 1, 50);
+    // Point light for subtle fill (less intense, less colorful)
+    const pointLight1 = new THREE.PointLight(0xffffff, 0.4, 50);
     pointLight1.position.set(3, 3, 3);
     scene.add(pointLight1);
 
     // Second point light for fill
-    const pointLight2 = new THREE.PointLight(0x00ffff, 0.8, 50);
+    const pointLight2 = new THREE.PointLight(0xffffff, 0.3, 50);
     pointLight2.position.set(-3, -3, 3);
     scene.add(pointLight2);
-
-    // Hemisphere light for natural gradient
-    const hemisphereLight = new THREE.HemisphereLight(0x667eea, 0x764ba2, 0.3);
-    scene.add(hemisphereLight);
 }
 
 function createGeometry(type, materialType) {
@@ -299,27 +295,28 @@ function createGeometry(type, materialType) {
     switch (materialType) {
         case 'standard':
             material = new THREE.MeshStandardMaterial({
-                color: 0x667eea,
-                metalness: 0.3,
-                roughness: 0.4,
-                envMapIntensity: 1
+                color: 0xcccccc,
+                metalness: 0.7,
+                roughness: 0.3,
+                envMapIntensity: 1.5
             });
             break;
         case 'physical':
             material = new THREE.MeshPhysicalMaterial({
-                color: 0x764ba2,
-                metalness: 0.5,
+                color: 0xdddddd,
+                metalness: 0.8,
                 roughness: 0.2,
                 clearcoat: 1,
-                clearcoatRoughness: 0.1
+                clearcoatRoughness: 0.1,
+                envMapIntensity: 1.5
             });
             break;
         case 'metallic':
             material = new THREE.MeshStandardMaterial({
                 color: 0xffffff,
                 metalness: 1,
-                roughness: 0.2,
-                envMapIntensity: 1.5
+                roughness: 0.1,
+                envMapIntensity: 2
             });
             break;
         case 'glass':
@@ -331,15 +328,22 @@ function createGeometry(type, materialType) {
                 transparent: true,
                 opacity: 0.5,
                 ior: 1.5,
-                thickness: 0.5
+                thickness: 0.5,
+                envMapIntensity: 1.5
             });
             break;
         default:
             material = new THREE.MeshStandardMaterial({
-                color: 0x667eea,
-                metalness: 0.3,
-                roughness: 0.4
+                color: 0xcccccc,
+                metalness: 0.7,
+                roughness: 0.3,
+                envMapIntensity: 1.5
             });
+    }
+
+    // Add cubemap as environment map if active
+    if (environmentType === 'cubemap' && cubemap) {
+        material.envMap = cubemap;
     }
 
     // Create mesh
@@ -624,16 +628,7 @@ function animate() {
         mesh.rotation.y += 0.01 * rotationSpeed;
     }
 
-    // Animate point lights in a circle
-    const time = Date.now() * 0.001;
-    const lights = scene.children.filter(child => child instanceof THREE.PointLight);
-    if (lights.length >= 2) {
-        lights[0].position.x = Math.sin(time) * 3;
-        lights[0].position.z = Math.cos(time) * 3;
-
-        lights[1].position.x = Math.sin(time + Math.PI) * 3;
-        lights[1].position.z = Math.cos(time + Math.PI) * 3;
-    }
+    // Keep point lights stationary to let environment colors dominate
 
     // Render scene
     renderer.render(scene, camera);
