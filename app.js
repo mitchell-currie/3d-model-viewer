@@ -23,12 +23,12 @@ let skyboxSettings = {
 
 // Cubemap settings
 let cubemapSettings = {
-    front: new THREE.Color(0x2a5298),
-    back: new THREE.Color(0x1e3c72),
-    top: new THREE.Color(0x7e22ce),
-    bottom: new THREE.Color(0x2a5298),
-    right: new THREE.Color(0x4a5298),
-    left: new THREE.Color(0x3a4288)
+    front: new THREE.Color(0x00ff00),   // Green
+    back: new THREE.Color(0xff00ff),    // Magenta
+    top: new THREE.Color(0xffff00),     // Yellow
+    bottom: new THREE.Color(0x00ffff),  // Cyan
+    right: new THREE.Color(0xff0000),   // Red
+    left: new THREE.Color(0x0000ff)     // Blue
 };
 
 // Initialize Three.js scene
