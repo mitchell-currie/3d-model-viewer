@@ -51,6 +51,15 @@ h1 {
     margin: 0;
 }
 
+.controls-hint {
+    padding: 10px 15px;
+    background: #1a1a1a;
+    color: #4a9eff;
+    font-size: 11px;
+    border-bottom: 1px solid #3a3a3a;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
 #controls {
     display: flex;
     flex-direction: column;

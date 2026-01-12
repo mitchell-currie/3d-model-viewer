@@ -10,6 +10,12 @@ let cameraDistance = 5;
 let cameraTheta = 0; // Horizontal angle
 let cameraPhi = Math.PI / 2; // Vertical angle (starts at equator)
 
+// Light controls
+let lightBalls = [];
+let selectedLight = null;
+let raycaster = new THREE.Raycaster();
+let mouse = new THREE.Vector2();
+
 // Environment settings
 let environmentType = 'skybox'; // 'skybox' or 'cubemap'
 
@@ -229,13 +235,54 @@ function switchEnvironment(type) {
     }
 }
 
+function createLightBall(x, y, z, intensity = 1) {
+    // Create visible sphere for the light
+    const geometry = new THREE.SphereGeometry(0.15, 16, 16);
+    const material = new THREE.MeshBasicMaterial({
+        color: 0xffffaa,
+        transparent: true,
+        opacity: 0.9
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.position.set(x, y, z);
+
+    // Create the actual point light
+    const light = new THREE.PointLight(0xffffff, intensity, 50);
+    light.position.set(x, y, z);
+    light.castShadow = true;
+    light.shadow.mapSize.width = 1024;
+    light.shadow.mapSize.height = 1024;
+
+    // Create glow effect
+    const glowGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffaa,
+        transparent: true,
+        opacity: 0.3
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    glow.position.copy(sphere.position);
+
+    scene.add(sphere);
+    scene.add(light);
+    scene.add(glow);
+
+    lightBalls.push({
+        sphere: sphere,
+        light: light,
+        glow: glow
+    });
+
+    return { sphere, light, glow };
+}
+
 function createLights() {
     // Ambient light for base illumination
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
     scene.add(ambientLight);
 
     // Main directional light with shadows
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
     directionalLight.position.set(5, 5, 5);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
@@ -244,20 +291,9 @@ function createLights() {
     directionalLight.shadow.camera.far = 50;
     scene.add(directionalLight);
 
-    // Rim light (back light for edge definition)
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    rimLight.position.set(-5, 0, -5);
-    scene.add(rimLight);
-
-    // Point light for subtle fill (less intense, less colorful)
-    const pointLight1 = new THREE.PointLight(0xffffff, 0.4, 50);
-    pointLight1.position.set(3, 3, 3);
-    scene.add(pointLight1);
-
-    // Second point light for fill
-    const pointLight2 = new THREE.PointLight(0xffffff, 0.3, 50);
-    pointLight2.position.set(-3, -3, 3);
-    scene.add(pointLight2);
+    // Create draggable light balls
+    createLightBall(3, 2, 2, 1.2);
+    createLightBall(-3, 2, -2, 1.2);
 }
 
 function createGeometry(type, materialType) {
@@ -466,9 +502,32 @@ function setupControls() {
     // Mouse interaction for manual rotation and camera control
     let isDraggingObject = false;
     let isDraggingCamera = false;
+    let isDraggingLight = false;
     let previousMousePosition = { x: 0, y: 0 };
 
     renderer.domElement.addEventListener('mousedown', (e) => {
+        // Update mouse position for raycasting
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        // Check if clicking on a light ball (shift key to enable light dragging)
+        if (e.shiftKey) {
+            raycaster.setFromCamera(mouse, camera);
+            const lightSpheres = lightBalls.map(lb => lb.sphere);
+            const intersects = raycaster.intersectObjects(lightSpheres);
+
+            if (intersects.length > 0) {
+                isDraggingLight = true;
+                selectedLight = lightBalls.find(lb => lb.sphere === intersects[0].object);
+                // Highlight selected light
+                selectedLight.sphere.material.opacity = 1;
+                selectedLight.glow.material.opacity = 0.6;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                return;
+            }
+        }
+
         if (e.button === 0) {
             // Left mouse button - rotate object
             isDraggingObject = true;
@@ -481,7 +540,27 @@ function setupControls() {
     });
 
     renderer.domElement.addEventListener('mousemove', (e) => {
-        if (isDraggingObject && mesh) {
+        if (isDraggingLight && selectedLight) {
+            // Move light in screen space
+            const deltaX = (e.clientX - previousMousePosition.x) * 0.01;
+            const deltaY = (e.clientY - previousMousePosition.y) * 0.01;
+
+            // Convert screen movement to world space movement
+            const right = new THREE.Vector3();
+            const up = new THREE.Vector3();
+            camera.getWorldDirection(right);
+            right.cross(camera.up).normalize();
+            up.copy(camera.up);
+
+            selectedLight.sphere.position.add(right.multiplyScalar(deltaX));
+            selectedLight.sphere.position.add(up.multiplyScalar(-deltaY));
+
+            // Update light and glow positions
+            selectedLight.light.position.copy(selectedLight.sphere.position);
+            selectedLight.glow.position.copy(selectedLight.sphere.position);
+
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        } else if (isDraggingObject && mesh) {
             const deltaX = e.clientX - previousMousePosition.x;
             const deltaY = e.clientY - previousMousePosition.y;
 
@@ -504,6 +583,14 @@ function setupControls() {
     });
 
     renderer.domElement.addEventListener('mouseup', (e) => {
+        if (isDraggingLight && selectedLight) {
+            // Reset light opacity
+            selectedLight.sphere.material.opacity = 0.9;
+            selectedLight.glow.material.opacity = 0.3;
+            selectedLight = null;
+            isDraggingLight = false;
+        }
+
         if (e.button === 0) {
             isDraggingObject = false;
         } else if (e.button === 2) {
