@@ -13,6 +13,7 @@ let cameraPhi = Math.PI / 2; // Vertical angle (starts at equator)
 // Light controls
 let lightBalls = [];
 let selectedLight = null;
+let selectedGizmo = null;
 let raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
 
@@ -24,8 +25,10 @@ let skyboxSettings = {
     topColor: new THREE.Color(0x4a90e2),    // Blue
     horizonColor: new THREE.Color(0xf39c12), // Orange
     bottomColor: new THREE.Color(0x2c3e50),  // Dark gray-blue
-    exponent: 2.0
+    exponent: 0.8
 };
+
+let skyboxEnvMap = null;
 
 // Cubemap settings
 let cubemapSettings = {
@@ -66,6 +69,9 @@ function init() {
 
     // Create skybox
     createSkybox();
+
+    // Generate initial environment map
+    generateSkyboxEnvMap();
 
     // Create lights
     createLights();
@@ -140,6 +146,78 @@ function updateSkybox() {
         skybox.material.uniforms.bottomColor.value = skyboxSettings.bottomColor;
         skybox.material.uniforms.exponent.value = skyboxSettings.exponent;
     }
+
+    // Generate environment map from skybox
+    generateSkyboxEnvMap();
+}
+
+function generateSkyboxEnvMap() {
+    // Create cubemap from skybox colors
+    const size = 512;
+
+    function createFaceCanvas(faceIndex) {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // For each face, we need to compute what part of the gradient it should show
+        // based on the Y coordinate in the cubemap
+
+        if (faceIndex === 2) {
+            // Top face (+Y) - should be mostly top color
+            ctx.fillStyle = '#' + skyboxSettings.topColor.getHexString();
+            ctx.fillRect(0, 0, size, size);
+        } else if (faceIndex === 3) {
+            // Bottom face (-Y) - should be mostly bottom color
+            ctx.fillStyle = '#' + skyboxSettings.bottomColor.getHexString();
+            ctx.fillRect(0, 0, size, size);
+        } else {
+            // Side faces - show full gradient from top to bottom
+            const gradient = ctx.createLinearGradient(0, 0, 0, size);
+
+            for (let i = 0; i <= 20; i++) {
+                const t = i / 20;
+                const h = 1 - 2 * t; // -1 to 1
+
+                let color;
+                if (h > 0) {
+                    const blend = Math.pow(h, skyboxSettings.exponent);
+                    color = new THREE.Color().lerpColors(skyboxSettings.horizonColor, skyboxSettings.topColor, blend);
+                } else {
+                    const blend = Math.pow(-h, skyboxSettings.exponent);
+                    color = new THREE.Color().lerpColors(skyboxSettings.horizonColor, skyboxSettings.bottomColor, blend);
+                }
+
+                gradient.addColorStop(t, '#' + color.getHexString());
+            }
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+        }
+
+        return canvas;
+    }
+
+    // Create 6 faces for the cubemap
+    // Order: +X, -X, +Y, -Y, +Z, -Z
+    const images = [];
+    for (let i = 0; i < 6; i++) {
+        images.push(createFaceCanvas(i));
+    }
+
+    if (skyboxEnvMap) {
+        skyboxEnvMap.dispose();
+    }
+
+    skyboxEnvMap = new THREE.CubeTexture(images);
+    skyboxEnvMap.needsUpdate = true;
+
+    // Update material environment map if mesh exists and in skybox mode
+    if (mesh && mesh.material.envMap !== undefined && environmentType === 'skybox') {
+        mesh.material.envMap = skyboxEnvMap;
+        mesh.material.needsUpdate = true;
+    }
 }
 
 function updateCameraPosition() {
@@ -213,11 +291,8 @@ function switchEnvironment(type) {
         }
         scene.background = null;
 
-        // Remove cubemap from material
-        if (mesh && mesh.material.envMap !== undefined) {
-            mesh.material.envMap = null;
-            mesh.material.needsUpdate = true;
-        }
+        // Generate and apply skybox environment map
+        generateSkyboxEnvMap();
 
         // Show/hide controls
         document.getElementById('skyboxControls').style.display = 'block';
@@ -263,17 +338,77 @@ function createLightBall(x, y, z, intensity = 1) {
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
     glow.position.copy(sphere.position);
 
+    // Create gizmos (X, Y, Z arrows)
+    const arrowLength = 1.5;
+    const arrowHeadLength = 0.3;
+    const arrowHeadWidth = 0.2;
+
+    const gizmoX = new THREE.ArrowHelper(
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(x, y, z),
+        arrowLength,
+        0xff0000,
+        arrowHeadLength,
+        arrowHeadWidth
+    );
+    gizmoX.userData.axis = 'x';
+
+    const gizmoY = new THREE.ArrowHelper(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(x, y, z),
+        arrowLength,
+        0x00ff00,
+        arrowHeadLength,
+        arrowHeadWidth
+    );
+    gizmoY.userData.axis = 'y';
+
+    const gizmoZ = new THREE.ArrowHelper(
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(x, y, z),
+        arrowLength,
+        0x0000ff,
+        arrowHeadLength,
+        arrowHeadWidth
+    );
+    gizmoZ.userData.axis = 'z';
+
+    // Make arrow cones and lines pickable by adding them to a list
+    const gizmoObjects = [
+        gizmoX.cone,
+        gizmoX.line,
+        gizmoY.cone,
+        gizmoY.line,
+        gizmoZ.cone,
+        gizmoZ.line
+    ];
+
+    // Store axis info on each component
+    gizmoX.cone.userData.axis = 'x';
+    gizmoX.line.userData.axis = 'x';
+    gizmoY.cone.userData.axis = 'y';
+    gizmoY.line.userData.axis = 'y';
+    gizmoZ.cone.userData.axis = 'z';
+    gizmoZ.line.userData.axis = 'z';
+
     scene.add(sphere);
     scene.add(light);
     scene.add(glow);
+    scene.add(gizmoX);
+    scene.add(gizmoY);
+    scene.add(gizmoZ);
 
     lightBalls.push({
         sphere: sphere,
         light: light,
-        glow: glow
+        glow: glow,
+        gizmoX: gizmoX,
+        gizmoY: gizmoY,
+        gizmoZ: gizmoZ,
+        gizmoObjects: gizmoObjects
     });
 
-    return { sphere, light, glow };
+    return { sphere, light, glow, gizmoX, gizmoY, gizmoZ };
 }
 
 function createLights() {
@@ -377,9 +512,11 @@ function createGeometry(type, materialType) {
             });
     }
 
-    // Add cubemap as environment map if active
+    // Add environment map based on active type
     if (environmentType === 'cubemap' && cubemap) {
         material.envMap = cubemap;
+    } else if (environmentType === 'skybox' && skyboxEnvMap) {
+        material.envMap = skyboxEnvMap;
     }
 
     // Create mesh
@@ -511,15 +648,45 @@ function setupControls() {
         mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-        // Check if clicking on a light ball (shift key to enable light dragging)
+        // Check if clicking on gizmo arrows or light ball (shift key to enable light dragging)
         if (e.shiftKey) {
             raycaster.setFromCamera(mouse, camera);
+
+            // First check gizmo arrows
+            const allGizmoObjects = [];
+            lightBalls.forEach(lb => {
+                allGizmoObjects.push(...lb.gizmoObjects);
+            });
+
+            const gizmoIntersects = raycaster.intersectObjects(allGizmoObjects);
+
+            if (gizmoIntersects.length > 0) {
+                isDraggingLight = true;
+                const hitObject = gizmoIntersects[0].object;
+                const axis = hitObject.userData.axis;
+
+                // Find which light ball this gizmo belongs to
+                selectedLight = lightBalls.find(lb =>
+                    lb.gizmoObjects.includes(hitObject)
+                );
+
+                selectedGizmo = axis;
+
+                // Highlight selected light
+                selectedLight.sphere.material.opacity = 1;
+                selectedLight.glow.material.opacity = 0.6;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                return;
+            }
+
+            // Then check light spheres
             const lightSpheres = lightBalls.map(lb => lb.sphere);
             const intersects = raycaster.intersectObjects(lightSpheres);
 
             if (intersects.length > 0) {
                 isDraggingLight = true;
                 selectedLight = lightBalls.find(lb => lb.sphere === intersects[0].object);
+                selectedGizmo = null; // No specific axis selected
                 // Highlight selected light
                 selectedLight.sphere.material.opacity = 1;
                 selectedLight.glow.material.opacity = 0.6;
@@ -541,23 +708,38 @@ function setupControls() {
 
     renderer.domElement.addEventListener('mousemove', (e) => {
         if (isDraggingLight && selectedLight) {
-            // Move light in screen space
             const deltaX = (e.clientX - previousMousePosition.x) * 0.01;
             const deltaY = (e.clientY - previousMousePosition.y) * 0.01;
 
-            // Convert screen movement to world space movement
-            const right = new THREE.Vector3();
-            const up = new THREE.Vector3();
-            camera.getWorldDirection(right);
-            right.cross(camera.up).normalize();
-            up.copy(camera.up);
+            if (selectedGizmo) {
+                // Move along specific axis
+                const delta = deltaX - deltaY; // Combined movement
 
-            selectedLight.sphere.position.add(right.multiplyScalar(deltaX));
-            selectedLight.sphere.position.add(up.multiplyScalar(-deltaY));
+                if (selectedGizmo === 'x') {
+                    selectedLight.sphere.position.x += delta;
+                } else if (selectedGizmo === 'y') {
+                    selectedLight.sphere.position.y += delta;
+                } else if (selectedGizmo === 'z') {
+                    selectedLight.sphere.position.z += delta;
+                }
+            } else {
+                // Move in screen space (original behavior)
+                const right = new THREE.Vector3();
+                const up = new THREE.Vector3();
+                camera.getWorldDirection(right);
+                right.cross(camera.up).normalize();
+                up.copy(camera.up);
 
-            // Update light and glow positions
+                selectedLight.sphere.position.add(right.multiplyScalar(deltaX));
+                selectedLight.sphere.position.add(up.multiplyScalar(-deltaY));
+            }
+
+            // Update light, glow, and gizmo positions
             selectedLight.light.position.copy(selectedLight.sphere.position);
             selectedLight.glow.position.copy(selectedLight.sphere.position);
+            selectedLight.gizmoX.position.copy(selectedLight.sphere.position);
+            selectedLight.gizmoY.position.copy(selectedLight.sphere.position);
+            selectedLight.gizmoZ.position.copy(selectedLight.sphere.position);
 
             previousMousePosition = { x: e.clientX, y: e.clientY };
         } else if (isDraggingObject && mesh) {
@@ -588,6 +770,7 @@ function setupControls() {
             selectedLight.sphere.material.opacity = 0.9;
             selectedLight.glow.material.opacity = 0.3;
             selectedLight = null;
+            selectedGizmo = null;
             isDraggingLight = false;
         }
 
