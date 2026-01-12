@@ -128,6 +128,42 @@ input[type="checkbox"] {
     border: 1px solid #3a3a3a;
 }
 
+input[type="color"] {
+    width: 100%;
+    height: 32px;
+    background: #1a1a1a;
+    border: 1px solid #3a3a3a;
+    cursor: pointer;
+    padding: 2px;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: 1px solid #3a3a3a;
+}
+
+input[type="color"]::-moz-color-swatch {
+    border: 1px solid #3a3a3a;
+}
+
+input[type="color"]:hover {
+    border-color: #4a9eff;
+}
+
+.section-divider {
+    font-size: 10px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+    padding: 15px 0 5px 0;
+    margin-top: 10px;
+    border-top: 1px solid #3a3a3a;
+}
+
 select {
     background: #1a1a1a;
     color: #e0e0e0;

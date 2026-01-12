@@ -45,6 +45,26 @@
                         <input type="checkbox" id="autoRotate" checked> Auto Rotate
                     </label>
                 </div>
+
+                <div class="section-divider">SKYBOX</div>
+
+                <div class="control-group">
+                    <label>Top Color</label>
+                    <input type="color" id="skyTopColor" value="#1e3c72">
+                </div>
+                <div class="control-group">
+                    <label>Horizon Color</label>
+                    <input type="color" id="skyHorizonColor" value="#7e22ce">
+                </div>
+                <div class="control-group">
+                    <label>Bottom Color</label>
+                    <input type="color" id="skyBottomColor" value="#2a5298">
+                </div>
+                <div class="control-group">
+                    <label>Gradient Exponent</label>
+                    <input type="range" id="skyExponent" min="0.5" max="5" step="0.1" value="2">
+                    <span id="skyExponentValue">2.0</span>
+                </div>
             </div>
             <div id="stats">
                 <div class="stat">

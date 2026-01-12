@@ -1,15 +1,22 @@
 // Scene setup
-let scene, camera, renderer, mesh;
+let scene, camera, renderer, mesh, skybox;
 let rotationSpeed = 1;
 let autoRotate = true;
 let frameCount = 0;
 let lastTime = performance.now();
 
+// Skybox settings
+let skyboxSettings = {
+    topColor: new THREE.Color(0x1e3c72),
+    horizonColor: new THREE.Color(0x7e22ce),
+    bottomColor: new THREE.Color(0x2a5298),
+    exponent: 2.0
+};
+
 // Initialize Three.js scene
 function init() {
     // Create scene
     scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x1a1a2e, 10, 50);
 
     // Create camera
     camera = new THREE.PerspectiveCamera(
@@ -33,6 +40,9 @@ function init() {
     renderer.toneMappingExposure = 1.2;
     document.getElementById('container').appendChild(renderer.domElement);
 
+    // Create skybox
+    createSkybox();
+
     // Create lights
     createLights();
 
@@ -47,6 +57,65 @@ function init() {
 
     // Start animation loop
     animate();
+}
+
+function createSkybox() {
+    // Create large sphere for skybox
+    const skyGeometry = new THREE.SphereGeometry(100, 32, 32);
+
+    // Custom shader for gradient skybox
+    const skyMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            topColor: { value: skyboxSettings.topColor },
+            horizonColor: { value: skyboxSettings.horizonColor },
+            bottomColor: { value: skyboxSettings.bottomColor },
+            exponent: { value: skyboxSettings.exponent }
+        },
+        vertexShader: `
+            varying vec3 vWorldPosition;
+            void main() {
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                vWorldPosition = worldPosition.xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 topColor;
+            uniform vec3 horizonColor;
+            uniform vec3 bottomColor;
+            uniform float exponent;
+            varying vec3 vWorldPosition;
+
+            void main() {
+                float h = normalize(vWorldPosition).y;
+
+                // Create gradient from bottom to top
+                vec3 color;
+                if (h > 0.0) {
+                    // Top half: horizon to top
+                    color = mix(horizonColor, topColor, pow(h, exponent));
+                } else {
+                    // Bottom half: bottom to horizon
+                    color = mix(horizonColor, bottomColor, pow(-h, exponent));
+                }
+
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `,
+        side: THREE.BackSide
+    });
+
+    skybox = new THREE.Mesh(skyGeometry, skyMaterial);
+    scene.add(skybox);
+}
+
+function updateSkybox() {
+    if (skybox && skybox.material.uniforms) {
+        skybox.material.uniforms.topColor.value = skyboxSettings.topColor;
+        skybox.material.uniforms.horizonColor.value = skyboxSettings.horizonColor;
+        skybox.material.uniforms.bottomColor.value = skyboxSettings.bottomColor;
+        skybox.material.uniforms.exponent.value = skyboxSettings.exponent;
+    }
 }
 
 function createLights() {
@@ -179,6 +248,33 @@ function setupControls() {
     rotationSlider.addEventListener('input', (e) => {
         rotationSpeed = parseFloat(e.target.value);
         rotationValue.textContent = rotationSpeed.toFixed(1) + 'x';
+    });
+
+    // Skybox controls
+    const skyTopColor = document.getElementById('skyTopColor');
+    skyTopColor.addEventListener('input', (e) => {
+        skyboxSettings.topColor.set(e.target.value);
+        updateSkybox();
+    });
+
+    const skyHorizonColor = document.getElementById('skyHorizonColor');
+    skyHorizonColor.addEventListener('input', (e) => {
+        skyboxSettings.horizonColor.set(e.target.value);
+        updateSkybox();
+    });
+
+    const skyBottomColor = document.getElementById('skyBottomColor');
+    skyBottomColor.addEventListener('input', (e) => {
+        skyboxSettings.bottomColor.set(e.target.value);
+        updateSkybox();
+    });
+
+    const skyExponent = document.getElementById('skyExponent');
+    const skyExponentValue = document.getElementById('skyExponentValue');
+    skyExponent.addEventListener('input', (e) => {
+        skyboxSettings.exponent = parseFloat(e.target.value);
+        skyExponentValue.textContent = skyboxSettings.exponent.toFixed(1);
+        updateSkybox();
     });
 
     // Geometry selection
