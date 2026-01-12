@@ -5,6 +5,11 @@ let autoRotate = true;
 let frameCount = 0;
 let lastTime = performance.now();
 
+// Camera controls
+let cameraDistance = 5;
+let cameraTheta = 0; // Horizontal angle
+let cameraPhi = Math.PI / 2; // Vertical angle (starts at equator)
+
 // Skybox settings
 let skyboxSettings = {
     topColor: new THREE.Color(0x1e3c72),
@@ -25,7 +30,7 @@ function init() {
         0.1,
         1000
     );
-    camera.position.z = 5;
+    updateCameraPosition();
 
     // Create renderer
     renderer = new THREE.WebGLRenderer({
@@ -116,6 +121,16 @@ function updateSkybox() {
         skybox.material.uniforms.bottomColor.value = skyboxSettings.bottomColor;
         skybox.material.uniforms.exponent.value = skyboxSettings.exponent;
     }
+}
+
+function updateCameraPosition() {
+    // Convert spherical coordinates to Cartesian
+    camera.position.x = cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+    camera.position.y = cameraDistance * Math.cos(cameraPhi);
+    camera.position.z = cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+
+    // Look at center
+    camera.lookAt(0, 0, 0);
 }
 
 function createLights() {
@@ -305,17 +320,25 @@ function setupControls() {
         autoRotate = e.target.checked;
     });
 
-    // Mouse interaction for manual rotation
-    let isDragging = false;
+    // Mouse interaction for manual rotation and camera control
+    let isDraggingObject = false;
+    let isDraggingCamera = false;
     let previousMousePosition = { x: 0, y: 0 };
 
     renderer.domElement.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        previousMousePosition = { x: e.clientX, y: e.clientY };
+        if (e.button === 0) {
+            // Left mouse button - rotate object
+            isDraggingObject = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        } else if (e.button === 2) {
+            // Right mouse button - orbit camera
+            isDraggingCamera = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        }
     });
 
     renderer.domElement.addEventListener('mousemove', (e) => {
-        if (isDragging && mesh) {
+        if (isDraggingObject && mesh) {
             const deltaX = e.clientX - previousMousePosition.x;
             const deltaY = e.clientY - previousMousePosition.y;
 
@@ -323,26 +346,70 @@ function setupControls() {
             mesh.rotation.x += deltaY * 0.01;
 
             previousMousePosition = { x: e.clientX, y: e.clientY };
+        } else if (isDraggingCamera) {
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+
+            // Update camera angles
+            cameraTheta -= deltaX * 0.01;
+            cameraPhi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraPhi + deltaY * 0.01));
+
+            updateCameraPosition();
+
+            previousMousePosition = { x: e.clientX, y: e.clientY };
         }
     });
 
-    renderer.domElement.addEventListener('mouseup', () => {
-        isDragging = false;
+    renderer.domElement.addEventListener('mouseup', (e) => {
+        if (e.button === 0) {
+            isDraggingObject = false;
+        } else if (e.button === 2) {
+            isDraggingCamera = false;
+        }
+    });
+
+    // Prevent context menu on right click
+    renderer.domElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+
+    // Mouse wheel for zoom
+    renderer.domElement.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        cameraDistance += e.deltaY * 0.01;
+        cameraDistance = Math.max(2, Math.min(20, cameraDistance));
+        updateCameraPosition();
     });
 
     // Touch support
+    let touchStartDistance = 0;
+
     renderer.domElement.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) {
-            isDragging = true;
+            // Single touch - rotate object
+            isDraggingObject = true;
             previousMousePosition = {
                 x: e.touches[0].clientX,
                 y: e.touches[0].clientY
             };
+        } else if (e.touches.length === 2) {
+            // Two finger touch - orbit camera
+            isDraggingCamera = true;
+            previousMousePosition = {
+                x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+            };
+            // Store initial distance for pinch zoom
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            touchStartDistance = Math.sqrt(dx * dx + dy * dy);
         }
     });
 
     renderer.domElement.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length === 1 && mesh) {
+        e.preventDefault();
+
+        if (isDraggingObject && e.touches.length === 1 && mesh) {
             const deltaX = e.touches[0].clientX - previousMousePosition.x;
             const deltaY = e.touches[0].clientY - previousMousePosition.y;
 
@@ -353,11 +420,39 @@ function setupControls() {
                 x: e.touches[0].clientX,
                 y: e.touches[0].clientY
             };
+        } else if (e.touches.length === 2) {
+            const currentX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+            if (isDraggingCamera) {
+                const deltaX = currentX - previousMousePosition.x;
+                const deltaY = currentY - previousMousePosition.y;
+
+                cameraTheta -= deltaX * 0.01;
+                cameraPhi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraPhi + deltaY * 0.01));
+
+                updateCameraPosition();
+            }
+
+            // Pinch to zoom
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const delta = touchStartDistance - distance;
+
+            cameraDistance += delta * 0.01;
+            cameraDistance = Math.max(2, Math.min(20, cameraDistance));
+            updateCameraPosition();
+
+            touchStartDistance = distance;
+
+            previousMousePosition = { x: currentX, y: currentY };
         }
     });
 
     renderer.domElement.addEventListener('touchend', () => {
-        isDragging = false;
+        isDraggingObject = false;
+        isDraggingCamera = false;
     });
 }
 
