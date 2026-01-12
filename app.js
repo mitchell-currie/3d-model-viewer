@@ -1,5 +1,5 @@
 // Scene setup
-let scene, camera, renderer, mesh, skybox;
+let scene, camera, renderer, mesh, skybox, cubemap;
 let rotationSpeed = 1;
 let autoRotate = true;
 let frameCount = 0;
@@ -10,12 +10,25 @@ let cameraDistance = 5;
 let cameraTheta = 0; // Horizontal angle
 let cameraPhi = Math.PI / 2; // Vertical angle (starts at equator)
 
+// Environment settings
+let environmentType = 'skybox'; // 'skybox' or 'cubemap'
+
 // Skybox settings
 let skyboxSettings = {
     topColor: new THREE.Color(0x1e3c72),
     horizonColor: new THREE.Color(0x7e22ce),
     bottomColor: new THREE.Color(0x2a5298),
     exponent: 2.0
+};
+
+// Cubemap settings
+let cubemapSettings = {
+    front: new THREE.Color(0x2a5298),
+    back: new THREE.Color(0x1e3c72),
+    top: new THREE.Color(0x7e22ce),
+    bottom: new THREE.Color(0x2a5298),
+    right: new THREE.Color(0x4a5298),
+    left: new THREE.Color(0x3a4288)
 };
 
 // Initialize Three.js scene
@@ -131,6 +144,89 @@ function updateCameraPosition() {
 
     // Look at center
     camera.lookAt(0, 0, 0);
+}
+
+function createCubemapTexture(color) {
+    // Create a canvas for each face
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+
+    // Fill with solid color
+    context.fillStyle = '#' + color.getHexString();
+    context.fillRect(0, 0, size, size);
+
+    const texture = new THREE.Texture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+}
+
+function createCubemap() {
+    // Dispose old cubemap if exists
+    if (cubemap) {
+        cubemap.dispose();
+    }
+
+    // Generate textures for each face
+    const textures = [
+        createCubemapTexture(cubemapSettings.right),  // +X
+        createCubemapTexture(cubemapSettings.left),   // -X
+        createCubemapTexture(cubemapSettings.top),    // +Y
+        createCubemapTexture(cubemapSettings.bottom), // -Y
+        createCubemapTexture(cubemapSettings.front),  // +Z
+        createCubemapTexture(cubemapSettings.back)    // -Z
+    ];
+
+    cubemap = new THREE.CubeTexture(textures.map(t => t.image));
+    cubemap.needsUpdate = true;
+
+    scene.background = cubemap;
+
+    // Update material environment map if mesh exists
+    if (mesh && mesh.material.envMap !== undefined) {
+        mesh.material.envMap = cubemap;
+        mesh.material.needsUpdate = true;
+    }
+}
+
+function updateCubemap() {
+    if (environmentType === 'cubemap') {
+        createCubemap();
+    }
+}
+
+function switchEnvironment(type) {
+    environmentType = type;
+
+    if (type === 'skybox') {
+        // Show skybox, hide cubemap
+        if (skybox) {
+            skybox.visible = true;
+        }
+        scene.background = null;
+
+        // Remove cubemap from material
+        if (mesh && mesh.material.envMap !== undefined) {
+            mesh.material.envMap = null;
+            mesh.material.needsUpdate = true;
+        }
+
+        // Show/hide controls
+        document.getElementById('skyboxControls').style.display = 'block';
+        document.getElementById('cubemapControls').style.display = 'none';
+    } else if (type === 'cubemap') {
+        // Hide skybox, show cubemap
+        if (skybox) {
+            skybox.visible = false;
+        }
+        createCubemap();
+
+        // Show/hide controls
+        document.getElementById('skyboxControls').style.display = 'none';
+        document.getElementById('cubemapControls').style.display = 'block';
+    }
 }
 
 function createLights() {
@@ -265,6 +361,12 @@ function setupControls() {
         rotationValue.textContent = rotationSpeed.toFixed(1) + 'x';
     });
 
+    // Environment type
+    const environmentTypeSelect = document.getElementById('environmentType');
+    environmentTypeSelect.addEventListener('change', (e) => {
+        switchEnvironment(e.target.value);
+    });
+
     // Skybox controls
     const skyTopColor = document.getElementById('skyTopColor');
     skyTopColor.addEventListener('input', (e) => {
@@ -290,6 +392,43 @@ function setupControls() {
         skyboxSettings.exponent = parseFloat(e.target.value);
         skyExponentValue.textContent = skyboxSettings.exponent.toFixed(1);
         updateSkybox();
+    });
+
+    // Cubemap controls
+    const cubeFront = document.getElementById('cubeFront');
+    cubeFront.addEventListener('input', (e) => {
+        cubemapSettings.front.set(e.target.value);
+        updateCubemap();
+    });
+
+    const cubeBack = document.getElementById('cubeBack');
+    cubeBack.addEventListener('input', (e) => {
+        cubemapSettings.back.set(e.target.value);
+        updateCubemap();
+    });
+
+    const cubeTop = document.getElementById('cubeTop');
+    cubeTop.addEventListener('input', (e) => {
+        cubemapSettings.top.set(e.target.value);
+        updateCubemap();
+    });
+
+    const cubeBottom = document.getElementById('cubeBottom');
+    cubeBottom.addEventListener('input', (e) => {
+        cubemapSettings.bottom.set(e.target.value);
+        updateCubemap();
+    });
+
+    const cubeRight = document.getElementById('cubeRight');
+    cubeRight.addEventListener('input', (e) => {
+        cubemapSettings.right.set(e.target.value);
+        updateCubemap();
+    });
+
+    const cubeLeft = document.getElementById('cubeLeft');
+    cubeLeft.addEventListener('input', (e) => {
+        cubemapSettings.left.set(e.target.value);
+        updateCubemap();
     });
 
     // Geometry selection
